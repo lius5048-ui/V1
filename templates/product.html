@@ -68,8 +68,20 @@
 
         {% if analysis %}
         <div class="card shadow-sm mb-3 border-warning">
-            <div class="card-header bg-warning bg-opacity-10"><strong>🧠 差评主题分析</strong></div>
+            <div class="card-header bg-warning bg-opacity-10 d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-lightbulb"></i> AI 产品改进建议</strong>
+                <small class="text-muted">基于差评分析</small>
+            </div>
             <div class="card-body"><pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem">{{ analysis.analysis_text }}</pre></div>
+        </div>
+        {% elif has_ai %}
+        <div class="card shadow-sm mb-3">
+            <div class="card-body text-center py-4">
+                <button class="btn btn-outline-warning" onclick="analyzeProduct()">
+                    <i class="bi bi-magic"></i> 分析差评 → 产品改进建议
+                </button>
+                <div id="analysisResult" class="mt-3 text-start" style="display:none"></div>
+            </div>
         </div>
         {% endif %}
 
@@ -160,5 +172,35 @@ new Chart(document.getElementById("ratingChart"), {
         plugins: { legend: { display: false } }
     }
 });
+
+async function analyzeProduct() {
+    const pid = "{{ product.product_id }}";
+    const btn = event.target;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> 分析中...';
+
+    try {
+        const resp = await fetch("/api/product/" + pid + "/analyze", { method: "POST" });
+        const data = await resp.json();
+        if (data.success) {
+            document.getElementById("analysisResult").innerHTML =
+                '<div class="card border-warning"><div class="card-header bg-warning bg-opacity-10"><strong><i class="bi bi-lightbulb"></i> AI 产品改进建议</strong></div><div class="card-body"><pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem;margin:0">' + data.analysis + '</pre></div></div>';
+            document.getElementById("analysisResult").style.display = "";
+            btn.style.display = "none";
+        } else {
+            document.getElementById("analysisResult").innerHTML =
+                '<div class="alert alert-danger">分析失败: ' + (data.error || "") + '</div>';
+            document.getElementById("analysisResult").style.display = "";
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-magic"></i> 分析差评 → 产品改进建议';
+        }
+    } catch (e) {
+        document.getElementById("analysisResult").innerHTML =
+            '<div class="alert alert-danger">请求失败: ' + e.message + '</div>';
+        document.getElementById("analysisResult").style.display = "";
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-magic"></i> 分析差评 → 产品改进建议';
+    }
+}
 </script>
 {% endblock %}

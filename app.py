@@ -2,6 +2,7 @@ import os, json, sys
 from flask import Flask, render_template, request, jsonify
 from models import db, Product, Review, RelatedProduct, ReviewAnalysis
 from tools.walmart_crawler import search_products
+from config import deepseek_client
 
 app = Flask(__name__)
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -191,7 +192,61 @@ def product_detail(pid):
                            neg_reviews=neg_reviews, pos_reviews=pos_reviews,
                            mid_reviews=mid_reviews,
                            related=related, analysis=analysis,
-                           specs=specs, images=images, rating_dist=rating_dist)
+                           specs=specs, images=images, rating_dist=rating_dist,
+                           has_ai=deepseek_client is not None)
+
+
+@app.route("/api/product/<pid>/analyze", methods=["POST"])
+def api_analyze_reviews(pid):
+    """Use AI to analyze negative reviews → product improvement suggestions."""
+    if deepseek_client is None:
+        return jsonify({"success": False, "error": "未配置 API Key"})
+
+    # Check if analysis already exists
+    existing = ReviewAnalysis.query.filter_by(product_id=pid).first()
+    if existing:
+        return jsonify({"success": True, "analysis": existing.analysis_text})
+
+    reviews = Review.query.filter_by(product_id=pid).order_by(Review.rating).all()
+    neg_reviews = [r for r in reviews if r.rating <= 3]
+    if not neg_reviews:
+        return jsonify({"success": True, "analysis": "暂无差评数据。"})
+
+    # Build prompt from negative reviews
+    texts = []
+    for r in neg_reviews[:10]:
+        body = r.body or r.title or ""
+        texts.append(f"[{r.rating}★] {body[:300]}")
+
+    prompt = (
+        "You are a product manager. Analyze these negative reviews from Walmart customers "
+        "and give specific product improvement suggestions.\n\n"
+        "Required output format:\n"
+        "## 必须修复的缺陷\n"
+        "- 问题描述 | 优先级(P0/P1/P2) | 改进建议\n\n"
+        "## 建议改进\n"
+        "- 改进点 | 说明\n\n"
+        "## 总结\n"
+        "- 一句话总结核心问题\n\n"
+        "Review data:\n" + "\n---\n".join(texts)
+    )
+
+    try:
+        resp = deepseek_client.chat.completions.create(
+            model="deepseek-chat",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.1, max_tokens=2048,
+        )
+        analysis_text = resp.choices[0].message.content
+
+        # Save to DB
+        new_analysis = ReviewAnalysis(product_id=pid, analysis_text=analysis_text)
+        db.session.add(new_analysis)
+        db.session.commit()
+
+        return jsonify({"success": True, "analysis": analysis_text})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 
 @app.route("/api/reviews/<pid>")
