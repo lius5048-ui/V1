@@ -7,3 +7,18 @@ __pycache__/
 *.xlsx
 *.md
 report_*
+
+# data & caches
+*.db
+output/
+tools/output/
+__pycache__/
+*.pyc
+
+# secrets
+.env
+
+# reports
+*.xlsx
+*.md
+report_*
