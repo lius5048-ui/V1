@@ -8,6 +8,19 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{os.path.join(basedir, 'walmart.db')}"
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
+# Error handlers — never expose source code
+@app.errorhandler(404)
+def not_found(e):
+    return render_template("error.html", code=404, message="页面不存在"), 404
+
+@app.errorhandler(500)
+def server_error(e):
+    return render_template("error.html", code=500, message="服务器内部错误"), 500
+
+@app.errorhandler(Exception)
+def all_exceptions(e):
+    return render_template("error.html", code=500, message="服务器内部错误"), 500
+
 db.init_app(app)
 
 with app.app_context():
