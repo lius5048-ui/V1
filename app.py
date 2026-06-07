@@ -245,5 +245,30 @@ def analysis_page():
                            categories=categories, brands=brands)
 
 
+@app.route("/api/product/<pid>/delete", methods=["POST"])
+def api_delete_product(pid):
+    """Delete a product and all its associated data."""
+    product = Product.query.filter_by(product_id=pid).first()
+    if not product:
+        return jsonify({"success": False, "error": "产品不存在"})
+
+    try:
+        Review.query.filter_by(product_id=pid).delete()
+        RelatedProduct.query.filter_by(product_id=pid).delete()
+        ReviewAnalysis.query.filter_by(product_id=pid).delete()
+        db.session.delete(product)
+        db.session.commit()
+
+        # Also remove cached JSON files
+        import glob
+        for f in glob.glob(os.path.join(basedir, "output", f"*{pid}*")):
+            os.remove(f)
+
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)})
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
