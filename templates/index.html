@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div><span class="text-muted">已爬取商品</span><div class="stat-number">{{ products|length }}</div></div>
+                    <div class="fs-1 text-primary"><i class="bi bi-box"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div><span class="text-muted">总评论数</span><div class="stat-number">{{ total_reviews }}</div></div>
+                    <div class="fs-1 text-success"><i class="bi bi-chat-dots"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div><span class="text-muted">平均评分</span><div class="stat-number">{{ avg_rating }}</div></div>
+                    <div class="fs-1 text-warning"><i class="bi bi-stars"></i></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-3 align-items-center">
+    <div class="col-md-3"><h5 class="mb-0"><i class="bi bi-collection"></i> 所有产品</h5></div>
+    <div class="col-md-3 mb-2 mb-md-0">
+        <select id="brandFilter" class="form-select">
+            <option value="">🏷️ 全部品牌</option>
+            {% for b in brands %}
+            <option value="{{ b|lower }}">{{ b }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-3">
+        <input id="searchBox" class="form-control" placeholder="🔍 筛选已有产品...">
+    </div>
+    <div class="col-md-3">
+        <div class="input-group">
+            <input id="crawlInput" class="form-control" placeholder="商品ID 或 关键词">
+            <button id="crawlBtn" class="btn btn-primary" onclick="searchResults()">
+                <i class="bi bi-search"></i> 搜索
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Search Results Modal -->
+<div class="modal fade" id="resultsModal" tabindex="-1">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-list-ul"></i> 搜索结果 — <span id="resultQuery"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0" id="resultBody">
+                <div class="text-center py-5 text-muted" id="resultLoading">
+                    <div class="spinner-border mb-2"></div><br>正在搜索...
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-primary" id="importSelectedBtn" onclick="importSelected()" disabled>
+                    <i class="bi bi-download"></i> 导入选中 (<span id="selectedCount">0</span>)
+                </button>
+                <button class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3" id="productGrid">
+    {% for p in products %}
+    <div class="col-lg-3 col-md-4 col-sm-6 product-item" data-title="{{ p.title|lower }}" data-brand="{{ p.brand|lower }}" data-pid="{{ p.product_id }}">
+        <a href="/product/{{ p.product_id }}" class="text-decoration-none text-dark">
+            <div class="card product-card shadow-sm h-100">
+                <div class="card-body">
+                    <h6 class="card-title truncate-3" style="min-height:4.2em">{{ p.title }}</h6>
+                    <div class="d-flex justify-content-between align-items-center mt-2">
+                        <span class="fs-5 fw-bold text-danger">${{ "%.2f"|format(p.price) if p.price else "N/A" }}</span>
+                        <span class="rating-badge">
+                            <span class="star">★</span> {{ "%.1f"|format(p.rating) if p.rating else "?" }}
+                        </span>
+                    </div>
+                    <div class="small text-muted mt-1">
+                        {{ p.brand }} · {{ p.review_count }} reviews
+                    </div>
+                    <div class="mt-1">
+                        {% if p.availability and "in stock" in p.availability|lower %}
+                            <span class="badge bg-success">In Stock</span>
+                        {% elif p.availability %}
+                            <span class="badge bg-secondary">{{ p.availability[:20] }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </a>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+const brandFilter = document.getElementById("brandFilter");
+const searchBox = document.getElementById("searchBox");
+
+function filterProducts() {
+    const brand = brandFilter.value;
+    const q = searchBox.value.toLowerCase().trim();
+    document.querySelectorAll(".product-item").forEach(el => {
+        const matchBrand = !brand || el.dataset.brand === brand;
+        const matchSearch = !q || el.dataset.title.includes(q) || el.dataset.pid.includes(q);
+        el.style.display = matchBrand && matchSearch ? "" : "none";
+    });
+}
+brandFilter.addEventListener("change", filterProducts);
+searchBox.addEventListener("input", filterProducts);
+
+document.getElementById("crawlInput").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") searchResults();
+});
+
+async function searchResults() {
+    const q = document.getElementById("crawlInput").value.trim();
+    if (!q) return;
+
+    document.getElementById("resultQuery").textContent = q;
+    document.getElementById("resultBody").innerHTML =
+        '<div class="text-center py-5 text-muted"><div class="spinner-border mb-2"></div><br>正在搜索...</div>';
+    document.getElementById("importSelectedBtn").disabled = true;
+    document.getElementById("selectedCount").textContent = "0";
+
+    const modal = new bootstrap.Modal(document.getElementById("resultsModal"));
+    modal.show();
+
+    try {
+        const resp = await fetch("/api/search", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({query: q}),
+        });
+        const data = await resp.json();
+        renderResults(data.products || []);
+    } catch (e) {
+        document.getElementById("resultBody").innerHTML =
+            '<div class="alert alert-danger m-3">请求失败: ' + e.message + '</div>';
+    }
+}
+
+let importedIds = [];
+
+function renderResults(products) {
+    if (!products.length) {
+        document.getElementById("resultBody").innerHTML =
+            '<div class="alert alert-warning m-3">未找到相关商品</div>';
+        return;
+    }
+
+    let html = `<div class="table-responsive"><table class="table table-hover table-sm mb-0">
+        <thead class="table-light"><tr>
+            <th style="width:40px"><input type="checkbox" id="selectAll" onchange="toggleAll()"></th>
+            <th>#</th>
+            <th>商品名称</th>
+            <th>品牌</th>
+            <th>价格</th>
+            <th>评分</th>
+            <th>评论数</th>
+            <th>库存</th>
+        </tr></thead><tbody>`;
+
+    products.forEach((p, i) => {
+        const exists = (p.exists || importedIds.includes(p.product_id)) ? "已存在" : "";
+        html += `<tr>
+            <td><input type="checkbox" class="product-check" value="${p.product_id}" ${exists ? "disabled" : ""}></td>
+            <td>${i + 1}</td>
+            <td><small>${p.title}</small></td>
+            <td>${p.brand || "-"}</td>
+            <td>${p.price ? "$" + p.price : "-"}</td>
+            <td>${p.rating ? "★ " + p.rating : "-"}</td>
+            <td><strong>${p.review_count || 0}</strong></td>
+            <td>${exists ? '<span class="badge bg-secondary">已存在</span>' : (p.availability || "-")}</td>
+        </tr>`;
+    });
+
+    html += "</tbody></table></div>";
+    document.getElementById("resultBody").innerHTML = html;
+    updateSelectedCount();
+}
+
+function toggleAll() {
+    const checked = document.getElementById("selectAll").checked;
+    document.querySelectorAll(".product-check:not(:disabled)").forEach(cb => cb.checked = checked);
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll(".product-check:checked").length;
+    document.getElementById("selectedCount").textContent = count;
+    document.getElementById("importSelectedBtn").disabled = count === 0;
+}
+
+async function importSelected() {
+    const ids = Array.from(document.querySelectorAll(".product-check:checked")).map(cb => cb.value);
+    if (!ids.length) return;
+
+    const btn = document.getElementById("importSelectedBtn");
+    const origText = btn.innerHTML;
+    btn.disabled = true;
+
+    for (let i = 0; i < ids.length; i++) {
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> 导入中 ${i + 1}/${ids.length}...`;
+        try {
+            const resp = await fetch("/api/crawl", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({query: ids[i]}),
+            });
+            const data = await resp.json();
+            if (data.success) {
+                importedIds.push(ids[i]);
+                // Disable this checkbox
+                document.querySelectorAll(".product-check").forEach(cb => {
+                    if (cb.value === ids[i]) {
+                        cb.checked = false;
+                        cb.disabled = true;
+                        cb.closest("tr").querySelector("td:last-child").innerHTML =
+                            '<span class="badge bg-success">已导入</span>';
+                    }
+                });
+            }
+        } catch (e) {
+            console.error("Import failed for", ids[i], e);
+        }
+    }
+
+    btn.innerHTML = '<i class="bi bi-check-circle"></i> 已完成 ✓';
+    btn.disabled = false;
+    updateSelectedCount();
+    setTimeout(() => window.location.reload(), 1500);
+}
+</script>
+{% endblock %}

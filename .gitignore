@@ -1,0 +1,9 @@
+*.db
+output/
+tools/output/
+__pycache__/
+*.pyc
+.env
+*.xlsx
+*.md
+report_*

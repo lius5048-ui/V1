@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block content %}
+<h5><i class="bi bi-graph-up"></i> 数据分析</h5>
+
+<div class="row mb-3 g-2">
+    <div class="col-md-4">
+        <select id="categoryFilter" class="form-select">
+            <option value="">📂 全部品类</option>
+            {% for c in categories %}
+            <option value="{{ c }}">{{ c }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <select id="brandFilter" class="form-select">
+            <option value="">🏷️ 全部品牌</option>
+            {% for b in brands %}
+            <option value="{{ b }}">{{ b }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div class="col-md-4">
+        <input id="searchBox" class="form-control" placeholder="🔍 搜索产品标题...">
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6><i class="bi bi-star"></i> 产品评分对比</h6>
+                <div class="chart-container"><canvas id="ratingCompChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h6><i class="bi bi-chat-square-text"></i> 评论数量对比</h6>
+                <div class="chart-container"><canvas id="reviewCompChart"></canvas></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h6><i class="bi bi-table"></i> 产品数据总表 <small class="text-muted" id="rowCount"></small></h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" id="dataTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Category</th>
+                        <th>Product</th>
+                        <th>Brand</th>
+                        <th>Price</th>
+                        <th>Rating</th>
+                        <th>Reviews</th>
+                        <th>Negative %</th>
+                        <th>Crawled</th>
+                    </tr>
+                </thead>
+                <tbody>
+                {% for p in products %}
+                    <tr data-category="{{ p.category }}" data-brand="{{ p.brand }}" data-title="{{ p.title|lower }}">
+                        <td>{{ loop.index }}</td>
+                        <td><span class="badge bg-info bg-opacity-25 text-dark">{{ p.category }}</span></td>
+                        <td><a href="/product/{{ p.product_id }}">{{ p.title[:50] }}</a></td>
+                        <td>{{ p.brand }}</td>
+                        <td>${{ "%.2f"|format(p.price) if p.price else "N/A" }}</td>
+                        <td><span class="star">★</span> {{ "%.1f"|format(p.rating) if p.rating else "?" }}</td>
+                        <td>{{ p.review_count }}</td>
+                        <td>{{ "%.0f"|format(p.neg_percent) if p.neg_percent else "?" }}%</td>
+                        <td><small class="text-muted">{{ p.crawl_time[:10] }}</small></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+const allProducts = [
+    {% for p in products %}
+    { idx: {{ loop.index0 }}, title: "{{ p.title|e }}", brand: "{{ p.brand|e }}",
+      category: "{{ p.category|e }}", rating: {{ p.rating or 0 }}, reviews: {{ p.review_count or 0 }} },
+    {% endfor %}
+];
+
+function filterAndUpdate() {
+    const cat = document.getElementById("categoryFilter").value;
+    const brand = document.getElementById("brandFilter").value;
+    const q = document.getElementById("searchBox").value.toLowerCase();
+
+    const rows = document.querySelectorAll("#dataTable tbody tr");
+    let visible = [];
+
+    rows.forEach((row, i) => {
+        const match = (
+            (!cat || row.dataset.category === cat) &&
+            (!brand || row.dataset.brand === brand) &&
+            (!q || row.dataset.title.includes(q))
+        );
+        row.style.display = match ? "" : "none";
+        if (match) visible.push(allProducts[i]);
+    });
+
+    document.getElementById("rowCount").textContent = `(${visible.length} rows)`;
+
+    const labels = visible.map(p => p.title.substring(0, 22));
+    const ratings = visible.map(p => p.rating);
+    const reviewsCount = visible.map(p => p.reviews);
+
+    window.ratingChart.data.labels = labels;
+    window.ratingChart.data.datasets[0].data = ratings;
+    window.ratingChart.update();
+
+    window.reviewChart.data.labels = labels;
+    window.reviewChart.data.datasets[0].data = reviewsCount;
+    window.reviewChart.update();
+}
+
+document.getElementById("categoryFilter").addEventListener("change", filterAndUpdate);
+document.getElementById("brandFilter").addEventListener("change", filterAndUpdate);
+document.getElementById("searchBox").addEventListener("input", filterAndUpdate);
+
+window.ratingChart = new Chart(document.getElementById("ratingCompChart"), {
+    type: "bar",
+    data: { labels: allProducts.map(p => p.title.substring(0,22)), datasets: [{ label: "Rating", data: allProducts.map(p => p.rating), backgroundColor: "#ffc107" }] },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { min: 0, max: 5 } }, plugins: { legend: { display: false } } }
+});
+
+window.reviewChart = new Chart(document.getElementById("reviewCompChart"), {
+    type: "bar",
+    data: { labels: allProducts.map(p => p.title.substring(0,22)), datasets: [{ label: "Reviews", data: allProducts.map(p => p.reviews), backgroundColor: "#0d6efd" }] },
+    options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } }, plugins: { legend: { display: false } } }
+});
+</script>
+{% endblock %}

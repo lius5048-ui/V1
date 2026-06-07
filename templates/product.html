@@ -1,0 +1,164 @@
+{% extends "base.html" %}
+{% block title %}{{ product.title[:40] }} - Walmart 数据平台{% endblock %}
+{% block content %}
+
+<nav aria-label="breadcrumb"><ol class="breadcrumb">
+    <li class="breadcrumb-item"><a href="/">首页</a></li>
+    <li class="breadcrumb-item active">{{ product.title[:50] }}...</li>
+</ol></nav>
+
+<div class="row g-3">
+    <!-- Left: Product Info -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <h5 class="card-title">{{ product.title }}</h5>
+                <div class="d-flex justify-content-between align-items-center mt-2">
+                    <span class="fs-3 fw-bold text-danger">${{ "%.2f"|format(product.price) if product.price else "N/A" }}</span>
+                    <span class="fs-5"><span class="star">★</span> {{ "%.1f"|format(product.rating) if product.rating else "?" }}</span>
+                </div>
+                <div class="text-muted small mb-2">{{ product.brand }} · {{ product.review_count }} reviews</div>
+                {% if product.availability %}
+                    <span class="badge bg-{{ "success" if "in stock" in product.availability|lower else "secondary" }}">{{ product.availability[:30] }}</span>
+                {% endif %}
+                <hr>
+
+                {% if images %}
+                <div id="carousel" class="carousel slide" data-bs-ride="carousel">
+                    <div class="carousel-inner">
+                        {% for img in images %}
+                        <div class="carousel-item {{ "active" if loop.first }}">
+                            <img src="{{ img }}" class="d-block w-100" style="max-height:250px;object-fit:contain" alt="">
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <hr>
+                {% endif %}
+
+                {% if product.description %}
+                <small><strong>Description</strong><br>{{ product.description[:500] }}</small>
+                <hr>
+                {% endif %}
+
+                {% if specs %}
+                <table class="table table-sm table-borderless small">
+                    {% for k,v in specs.items() %}
+                    <tr><td class="text-muted ps-0" style="width:45%">{{ k }}</td><td>{{ v }}</td></tr>
+                    {% endfor %}
+                </table>
+                {% endif %}
+
+                <a href="{{ product.url }}" target="_blank" class="btn btn-outline-primary btn-sm w-100 mt-2">
+                    <i class="bi bi-box-arrow-up-right"></i> View on Walmart
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right: Reviews + Chart -->
+    <div class="col-lg-8">
+        <!-- Rating Distribution Chart -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body">
+                <h6><i class="bi bi-bar-chart"></i> Rating Distribution</h6>
+                <div class="chart-container"><canvas id="ratingChart"></canvas></div>
+            </div>
+        </div>
+
+        {% if analysis %}
+        <div class="card shadow-sm mb-3 border-warning">
+            <div class="card-header bg-warning bg-opacity-10"><strong>🧠 差评主题分析</strong></div>
+            <div class="card-body"><pre style="white-space:pre-wrap;font-family:inherit;font-size:.9rem">{{ analysis.analysis_text }}</pre></div>
+        </div>
+        {% endif %}
+
+        <!-- Review Filters -->
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0"><i class="bi bi-chat-dots"></i> Reviews ({{ reviews|length }})</h6>
+            <div class="d-flex gap-2">
+                <select id="ratingFilter" class="form-select form-select-sm" style="width:auto">
+                    <option value="all">All Ratings</option>
+                    <option value="negative">Negative (1-3★)</option>
+                    <option value="mid">Mid (3★)</option>
+                    <option value="positive">Positive (4-5★)</option>
+                </select>
+                <select id="sortSelect" class="form-select form-select-sm" style="width:auto">
+                    <option value="date">Newest</option>
+                    <option value="rating_asc">Lowest Rating</option>
+                    <option value="helpful">Most Helpful</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Review List -->
+        <div id="reviewList">
+            {% for r in reviews %}
+            <div class="card shadow-sm mb-2 {{ "neg-review" if r.rating <= 3 else "pos-review" if r.rating >= 4 }}">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between">
+                        <strong>{% for _ in range(r.rating) %}★{% endfor %}{% for _ in range(5-r.rating) %}☆{% endfor %}</strong>
+                        <small class="text-muted">{{ r.date }}</small>
+                    </div>
+                    {% if r.title %}<strong class="small">{{ r.title }}</strong>{% endif %}
+                    <p class="mb-1 small">{{ r.body[:500] }}</p>
+                    <div class="small text-muted">
+                        👍 {{ r.helpful_count or 0 }}
+                        {% if r.verified %} · ✅ Verified Purchase{% endif %}
+                        {% if r.user_nickname %} · {{ r.user_nickname }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Related Products -->
+        {% if related %}
+        <div class="card shadow-sm mt-3">
+            <div class="card-body">
+                <h6><i class="bi bi-link-45deg"></i> Related Products</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead><tr><th>#</th><th>Name</th><th>Price</th><th>Rating</th><th>Reviews</th></tr></thead>
+                        <tbody>
+                        {% for r in related %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td>
+                                {% if r.url %}
+                                <a href="{{ r.url }}" target="_blank">{{ r.title[:60] }}</a>
+                                {% else %}{{ r.title[:60] }}{% endif %}
+                            </td>
+                            <td>${{ "%.2f"|format(r.price) if r.price else "N/A" }}</td>
+                            <td>{{ "%.1f"|format(r.rating) if r.rating else "?" }}</td>
+                            <td>{{ r.review_count }}</td>
+                        </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+new Chart(document.getElementById("ratingChart"), {
+    type: "bar",
+    data: {
+        labels: ["5★","4★","3★","2★","1★"],
+        datasets: [{
+            label: "Count",
+            data: [{{ rating_dist[5] }},{{ rating_dist[4] }},{{ rating_dist[3] }},{{ rating_dist[2] }},{{ rating_dist[1] }}],
+            backgroundColor: ["#198754","#4caf50","#ffc107","#fd7e14","#dc3545"],
+        }]
+    },
+    options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } },
+        plugins: { legend: { display: false } }
+    }
+});
+</script>
+{% endblock %}
